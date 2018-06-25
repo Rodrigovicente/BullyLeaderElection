@@ -13,6 +13,9 @@ from random import randint
 INICIA_ELEICAO = 10
 RESPOSTA_ELEICAO = 11
 LIDER_ATUAL = 20
+INICIA_BERKLEY = 30
+RESPOSTA_BERKLEY = 31
+AJUSTE_BERKLEY = 32
 
 GRUPO_MC = '224.0.0.0'
 PORTA = 8888
@@ -71,7 +74,6 @@ def receive_message():
 
 	if sender_addr[0] != myAddr:
 		print('\n')
-		""" para INICIA_ELEICAO """
 		if received_data.action == INICIA_ELEICAO:
 			print('Pedido de eleição recebido.')
 			if int(PID) > int(received_data.msg):
@@ -94,17 +96,19 @@ def receive_message():
 
 		elif received_data.action == INICIA_BERKLEY:
 			adjust = int(received_data.msg) - currentTime
-			print('Pedido de valor de ajuste para o algoritom Berkley. Ajuste enviado: ', adjust)
+			print('Pedido de valor de ajuste para o algoritmo de Berkley. Ajuste enviado: ', adjust)
 			response = Mensagem(RESPOSTA_BERKLEY, adjust)
 			serial_response = pickle.dumps(response)
 			mySocket.sendto(serial_response, sender_addr)
 			return (INICIA_BERKLEY, True)
 
 		elif received_data.action == RESPOSTA_BERKLEY:
+			print('Adiciona o ajuste do escravo à lista de tempo.')
 			timeList.append((sender_addr, received_data.msg))
 			return (RESPOSTA_BERKLEY, True)
 
 		elif received_data.action == AJUSTE_BERKLEY:
+			print('Ajusta o tempo de acordo com o enviado pelo lider')
 			currentTime = received_data.msg + currentTime
 
 		else:
@@ -128,10 +132,12 @@ def send_leader():
 BERKLEY
 """
 def run_berkley():
+	print('Inicia o algoritmo de Berkley. Envia mensagem em multicast com o tempo do lider.')
 	msg = Mensagem(INICIA_BERKLEY, currentTime)
 	serial_data = pickle.dumps(msg)
 	mySocket.sendto(serial_data, (GRUPO_MC, PORTA))
 
+	print('Esperando respostas.')
 	timeoutMark = time.time() + 1.0
 	while True:
 		timeOut = timeoutMark - time.time()
@@ -142,12 +148,13 @@ def run_berkley():
 
 		receive_message()
 
+	print('Inicia o calculo dos ajustes.')
 	timeSum = 0
 	for _, time in timeList:
 		timeSum += int(time)
 
 	timeAvg = int(timeSum / (len(timeList) + 1))
-
+	print('Envia os ajustes aos escravos.')
 	for addr, time in timeList:
 		timeAdjust = timeAvg - int(time)
 		msg = Mensagem(AJUSTE_BERKLEY, timeAdjust)
