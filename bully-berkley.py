@@ -74,7 +74,7 @@ def receive_message():
 		""" para INICIA_ELEICAO """
 		if received_data.action == INICIA_ELEICAO:
 			print('Pedido de eleição recebido.')
-			if PID > int(received_data.msg):
+			if int(PID) > int(received_data.msg):
 				print('\t- Tem PID maior (', PID, ' > ', int(received_data.msg), '). Enviando resposta.')
 				serial_response = pickle.dumps(RESPOSTA_ELEICAO)
 				mySocket.sendto(serial_response, sender_addr)
@@ -153,7 +153,7 @@ def run_berkley():
 		msg = Mensagem(AJUSTE_BERKLEY, timeAdjust)
 		serial_data = pickle.dumps(msg)
 		mySocket.sendto(serial_data, addr)
-	currentTime += timeAvg 
+	currentTime += timeAvg
 	timeList.clear()
 
 
