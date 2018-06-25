@@ -17,6 +17,7 @@ PORTA = 8888
 PID = str(os.getpid())
 
 isLeader = False
+currentLeaderAddr = ''
 
 mySocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 mySocket.bind(('', PORTA))
@@ -66,16 +67,20 @@ def start_election():
 		received_data = receiveMessage()
 
 		if received_data[0] == RESPOSTA_ELEICAO:
+			isLeader = False
 			break
 
 		if (timeout_mark - time.time()) <= 0:
 			print("Torna-se lider.")
 			isLeader = True
+			currentLeaderAddr = myAddr
 			sendLeader()
 			break
 
 
-
+"""
+GERENCIA MENSAGENS
+"""
 def receiveMessage():
 	serial_data, sender_addr = mySocket.recvfrom(512)
 	received_data = pickle.loads(serial_data)
@@ -92,11 +97,18 @@ def receiveMessage():
 
 		""" para RESPOSTA_ELEICAO """
 		elif received_data.action == RESPOSTA_ELEICAO:
-			isLeader = False
 			return (RESPOSTA_ELEICAO, True)
+
+		""" para DEFINE_LIDER """
+		elif received_data.action == DEFINE_LIDER:
+			currentLeaderAddr = received_data.msg
+			return (DEFINE_LIDER, True)
 
 	return (None, None)
 
+"""
+ANUNCIA LIDER
+"""
 def sendLeader():
 	msg = Mensagem(DEFINE_LIDER, myAddr)
 	serial_data = pickle.dumps(msg)
