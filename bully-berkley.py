@@ -166,8 +166,8 @@ def run_berkley():
 
 def start_clock():
 	currentTime = 0
-	timeStep = randint(1,5)
-	# timeStep = 1
+	# timeStep = randint(1,5)
+	timeStep = 1
 	while True:
 		currentTime += timeStep
 		time.sleep(0.25)
