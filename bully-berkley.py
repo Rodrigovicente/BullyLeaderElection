@@ -4,8 +4,8 @@ import select
 import sys
 import os
 import netifaces
-import time
 import pickle
+import time as t
 from threading import Thread
 from random import randint
 
@@ -13,19 +13,23 @@ from random import randint
 INICIA_ELEICAO = 10
 RESPOSTA_ELEICAO = 11
 LIDER_ATUAL = 20
-INICIA_BERKLEY = 30
-RESPOSTA_BERKLEY = 31
-AJUSTE_BERKLEY = 32
+INICIA_BERKELEY = 30
+RESPOSTA_BERKELEY = 31
+AJUSTE_BERKELEY = 32
 
 GRUPO_MC = '224.0.0.0'
 PORTA = 8888
 PID = str(os.getpid())
 
+global isLeader
+global currentLeaderAddr
+global timeList
+global currentTime
+
 isLeader = False
 currentLeaderAddr = ''
 timeList = []
 currentTime = 0
-
 
 class Mensagem():
 	def __init__(self, action, msg):
@@ -37,15 +41,16 @@ class Mensagem():
 ALGORITMO DO BULLY
 """
 def start_election():
+	print('Iniciando eleição.')
 	msg = Mensagem(INICIA_ELEICAO, PID)
 	serial_data = pickle.dumps(msg)
 	print('Enviando para todos em multicast.')
 	mySocket.sendto(serial_data, (GRUPO_MC, PORTA))
 
 	print('Esperando respostas.')
-	timeoutMark = time.time() + 1.0
+	timeoutMark = t.time() + 1.0
 	while True:
-		timeOut = timeoutMark - time.time()
+		timeOut = timeoutMark - t.time()
 		if timeOut > 0:
 			readables, writeables, exceptions = select.select([mySocket], [], [mySocket], timeOut)
 		else:
@@ -53,6 +58,7 @@ def start_election():
 			isLeader = True
 			currentLeaderAddr = myAddr
 			send_leader()
+			run_berkeley()
 			break
 
 		if readables:
@@ -72,8 +78,10 @@ def receive_message():
 	serial_data, sender_addr = mySocket.recvfrom(512)
 	received_data = pickle.loads(serial_data)
 
+	global currentTime
+
 	if sender_addr[0] != myAddr:
-		print('\n')
+		print('')
 		if received_data.action == INICIA_ELEICAO:
 			print('Pedido de eleição recebido.')
 			if int(PID) > int(received_data.msg):
@@ -95,22 +103,26 @@ def receive_message():
 			currentLeaderAddr = received_data.msg
 			return (LIDER_ATUAL, True)
 
-		elif received_data.action == INICIA_BERKLEY:
-			adjust = int(received_data.msg) - currentTime
-			print('Pedido de valor de ajuste para o algoritmo de Berkley. Ajuste enviado: ', adjust)
-			response = Mensagem(RESPOSTA_BERKLEY, adjust)
+		elif received_data.action == INICIA_BERKELEY:
+			adjust = received_data.msg - currentTime
+			print('Pedido de valor de ajuste para o algoritmo de Berkeley.')
+			print('Tempo atual: ', currentTime,' - Ajuste enviado: ', adjust, '.')
+			response = Mensagem(RESPOSTA_BERKELEY, adjust)
 			serial_response = pickle.dumps(response)
 			mySocket.sendto(serial_response, sender_addr)
-			return (INICIA_BERKLEY, True)
+			return (INICIA_BERKELEY, True)
 
-		elif received_data.action == RESPOSTA_BERKLEY:
-			print('Adiciona o ajuste do escravo à lista de tempo.')
+		elif received_data.action == RESPOSTA_BERKELEY:
+			print('Adiciona o ajuste do escravo à lista de tempo (', received_data.msg, ').')
 			timeList.append((sender_addr, received_data.msg))
-			return (RESPOSTA_BERKLEY, True)
+			return (RESPOSTA_BERKELEY, True)
 
-		elif received_data.action == AJUSTE_BERKLEY:
-			print('Ajusta o tempo de acordo com o enviado pelo lider')
+		elif received_data.action == AJUSTE_BERKELEY:
+			print('Ajusta o tempo de acordo com o enviado pelo lider (', received_data.msg,').')
+			print(' - Tempo antes do ajuste: ', currentTime, '.')
 			currentTime = received_data.msg + currentTime
+			print(' - Tempo ajustado: ', currentTime, '.')
+			return (AJUSTE_BERKELEY, True)
 
 		else:
 			print('Padrão de mensagem não reconhecido.')
@@ -130,48 +142,56 @@ def send_leader():
 
 
 """
-BERKLEY
+BERKELEY
 """
-def run_berkley():
-	print('Inicia o algoritmo de Berkley. Envia mensagem em multicast com o tempo do lider.')
-	msg = Mensagem(INICIA_BERKLEY, currentTime)
+def run_berkeley():
+	global currentTime
+	print('Inicia o algoritmo de Berkeley. Envia mensagem em multicast com o tempo do lider (', currentTime, ').')
+	msg = Mensagem(INICIA_BERKELEY, currentTime)
 	serial_data = pickle.dumps(msg)
 	mySocket.sendto(serial_data, (GRUPO_MC, PORTA))
 
 	print('Esperando respostas.')
-	timeoutMark = time.time() + 1.0
+	timeoutMark = t.time() + 1.0 # 1.0 é o tempo de espera em s
 	while True:
-		timeOut = timeoutMark - time.time()
+		timeOut = timeoutMark - t.time()
 		if timeOut > 0:
 			readables, writeables, exceptions = select.select([mySocket], [], [mySocket], timeOut)
 		else:
 			break
 
-		receive_message()
+		if readables:
+			receive_message()
 
-	print('Inicia o calculo dos ajustes.')
+	print('Calcula dos ajustes.')
 	timeSum = 0
+	# print('Valores para a média de tempo:')
 	for _, time in timeList:
 		timeSum += int(time)
+		# print(' - ', time)
+	# print('Somatorio: ', timeSum)
 
 	timeAvg = int(timeSum / (len(timeList) + 1))
+	# print('Média de tempo: ', timeAvg)
 	print('Envia os ajustes aos escravos.')
 	for addr, time in timeList:
-		timeAdjust = timeAvg - int(time)
-		msg = Mensagem(AJUSTE_BERKLEY, timeAdjust)
+		timeAdjust = timeAvg + int(time)
+		msg = Mensagem(AJUSTE_BERKELEY, timeAdjust)
 		serial_data = pickle.dumps(msg)
 		mySocket.sendto(serial_data, addr)
-	currentTime += timeAvg
 	timeList.clear()
+	print(' - Tempo antes do ajuste: ', currentTime, '.')
+	currentTime += timeAvg
+	print(' - Tempo ajustado: ', currentTime, '.')
 
 
 def start_clock():
-	currentTime = 0
+	global currentTime
 	# timeStep = randint(1,5)
 	timeStep = 1
 	while True:
 		currentTime += timeStep
-		time.sleep(0.25)
+		t.sleep(0.25)
 
 
 
@@ -194,9 +214,10 @@ while True:
 	readables, writeables, exceptions = select.select([mySocket, sys.stdin], [], [mySocket])
 	for sock in readables:
 		if sock == mySocket:
-			receive_message()
+			received = receive_message()
+			if (received[0] == INICIA_ELEICAO) and (received[1] == True):
+				start_election()
 
 		elif sock == sys.stdin:
 			sys.stdin.readline()
-			print('Iniciando eleição.')
 			start_election()
