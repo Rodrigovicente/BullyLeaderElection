@@ -78,7 +78,8 @@ def receive_message():
 			print('Pedido de eleição recebido.')
 			if int(PID) > int(received_data.msg):
 				print('\t- Tem PID maior (', PID, ' > ', int(received_data.msg), '). Enviando resposta.')
-				serial_response = pickle.dumps(RESPOSTA_ELEICAO)
+				response = Mensagem(RESPOSTA_ELEICAO, 0)
+				serial_response = pickle.dumps(response)
 				mySocket.sendto(serial_response, sender_addr)
 				return (INICIA_ELEICAO, True)
 
@@ -184,6 +185,7 @@ mySocket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 list_target = 1
 myAddr = netifaces.ifaddresses(netifaces.interfaces()[list_target])[2][0]['addr']
 print('IP: ', myAddr)
+print('PID: ', PID)
 
 Thread(target = start_clock).start()
 
